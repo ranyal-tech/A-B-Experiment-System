@@ -1,6 +1,7 @@
 package com.ab.experiment.system.service;
 
 import com.ab.experiment.system.config.ExperimentConfig;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -10,9 +11,12 @@ import java.util.Map;
 public class ExperimentService {
 
     private final ExperimentConfig config;
+    private final StringRedisTemplate redisTemplate;
 
-    public ExperimentService(ExperimentConfig config) {
+    public ExperimentService(ExperimentConfig config,
+                             StringRedisTemplate redisTemplate) {
         this.config = config;
+        this.redisTemplate = redisTemplate;
     }
 
     public Map<String, String> getAllVariants(String userId) {
@@ -23,9 +27,26 @@ public class ExperimentService {
                 config.getExperiments().entrySet()) {
 
             String experimentId = experiment.getKey();
-            Map<String, Integer> variants = experiment.getValue();
 
-            String variant = assignVariant(userId, experimentId, variants);
+            String cacheKey = "exp:" + userId + ":" + experimentId;
+
+            // ✅ 1. Check Redis
+            String cachedVariant = redisTemplate.opsForValue().get(cacheKey);
+
+            if (cachedVariant != null) {
+                result.put(experimentId, cachedVariant);
+                continue;
+            }
+
+            // ✅ 2. Compute if not cached
+            String variant = assignVariant(
+                    userId,
+                    experimentId,
+                    experiment.getValue()
+            );
+
+            // ✅ 3. Store in Redis
+            redisTemplate.opsForValue().set(cacheKey, variant);
 
             result.put(experimentId, variant);
         }
