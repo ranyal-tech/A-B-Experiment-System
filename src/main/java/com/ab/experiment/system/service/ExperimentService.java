@@ -1,6 +1,8 @@
 package com.ab.experiment.system.service;
 
 import com.ab.experiment.system.config.ExperimentConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -12,7 +14,7 @@ public class ExperimentService {
 
     private final ExperimentConfig config;
     private final StringRedisTemplate redisTemplate;
-
+    private static final Logger log = LoggerFactory.getLogger(ExperimentService.class);
     public ExperimentService(ExperimentConfig config,
                              StringRedisTemplate redisTemplate) {
         this.config = config;
@@ -29,15 +31,23 @@ public class ExperimentService {
             String experimentId = experiment.getKey();
 
             String cacheKey = "exp:" + userId + ":" + experimentId;
+            String cachedVariant = null;
 
             // ✅ 1. Check Redis
-            String cachedVariant = redisTemplate.opsForValue().get(cacheKey);
-
+            try {
+                cachedVariant = redisTemplate.opsForValue().get(cacheKey);
+            } catch (Exception e) {
+                log.error("Redis read failed for key={}", cacheKey, e);
+            }
             if (cachedVariant != null) {
+                log.info("Cache HIT for userId={}, experimentId={}, variant={}",
+                        userId, experimentId, cachedVariant);
+
                 result.put(experimentId, cachedVariant);
                 continue;
             }
 
+            log.info("Cache MISS for userId={}, experimentId={}", userId, experimentId);
             // ✅ 2. Compute if not cached
             String variant = assignVariant(
                     userId,
@@ -45,6 +55,8 @@ public class ExperimentService {
                     experiment.getValue()
             );
 
+            log.info("Assigned variant={} for userId={}, experimentId={}",
+                    variant, userId, experimentId);
             // ✅ 3. Store in Redis
             redisTemplate.opsForValue().set(cacheKey, variant);
 

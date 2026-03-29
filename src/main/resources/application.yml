@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: AB-Experiment-System
+  redis:
+    host: ${SPRING_REDIS_HOST:redis}
+    port: ${SPRING_REDIS_PORT:6379}
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    com.ab.experiment.system: DEBUG
